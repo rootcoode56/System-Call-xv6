@@ -1,4 +1,7 @@
 // Saved registers for kernel context switches.
+#include "types.h"
+#include "hapinfo.h"
+
 struct context {
   uint64 ra;
   uint64 sp;
@@ -104,4 +107,8 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+
+  // Heap activity logging for hapinfo syscall
+  struct haplog haplog[HAPLOG_SIZE];
+  int haplog_index;
 };

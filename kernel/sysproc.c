@@ -6,6 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "hapinfo.h"
 
 uint64
 sys_exit(void)
@@ -42,10 +43,11 @@ sys_sbrk(void)
   uint64 addr;
   int t;
   int n;
+  struct proc *p = myproc();
 
   argint(0, &n);
   argint(1, &t);
-  addr = myproc()->sz;
+  addr = p->sz;
 
   if(t == SBRK_EAGER || n < 0) {
     if(growproc(n) < 0) {
@@ -59,8 +61,20 @@ sys_sbrk(void)
       return -1;
     if(addr + n > TRAPFRAME)
       return -1;
-    myproc()->sz += n;
+    p->sz += n;
   }
+
+  // Log the sbrk call for hapinfo
+  if(p->haplog_index < HAPLOG_SIZE) {
+    acquire(&tickslock);
+    p->haplog[p->haplog_index].old_sz = addr;
+    p->haplog[p->haplog_index].sbrk_size = n;
+    p->haplog[p->haplog_index].size_change = (t == SBRK_EAGER || n < 0) ? n : 0;
+    p->haplog[p->haplog_index].ticks = ticks;
+    release(&tickslock);
+    p->haplog_index++;
+  }
+
   return addr;
 }
 
@@ -106,4 +120,22 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_hapinfo(void)
+{
+  uint64 addr;
+  struct proc *p = myproc();
+  struct hapinfo hi;
+
+  argaddr(0, &addr);
+
+  hi.log_index = p->haplog_index;
+  memmove(hi.log, p->haplog, sizeof(struct haplog) * p->haplog_index);
+
+  if (copyout(p->pagetable, addr, (char *)&hi, sizeof(hi)) < 0)
+    return -1;
+
+  return 0;
 }
